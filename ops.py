@@ -7,10 +7,11 @@ def blur(image, radius):
     return new_img
 
 
-def hsv_threshold(image, hue=(100, 200), lum=(100, 200), sat=(100, 200)):
+def hsv_threshold(image, hue=(0, 250), lum=(50, 200), sat=(50, 200)):
     ranges = tuple(zip(hue, lum, sat))
     img = cv2.inRange(cv2.cvtColor(image, cv2.COLOR_BGR2HSV), *ranges)
-
+    # cv2.imshow("test image", img)
+    # cv2.waitKey(0)
     return img
 
 

@@ -4,9 +4,12 @@ import multiprocessing
 import timeit
 from ctypes import c_byte, c_char, c_ubyte
 from functools import reduce
+from threading import Thread
 from typing import Tuple
 
 from multiprocessing.sharedctypes import RawArray
+
+import matplotlib.pyplot as plt
 
 import cv2
 import numpy as np
@@ -14,7 +17,7 @@ import random
 from ops import *
 
 # Number of runs to average benchmark data
-BENCHMARK_COUNT = 100
+BENCHMARK_COUNT = 5
 
 
 def get_images(count):
@@ -79,9 +82,10 @@ def test_process_sequential(num_images):
     op_time = timeit.timeit(blur_all, number=BENCHMARK_COUNT) / BENCHMARK_COUNT
 
     print("Avg time to process {} images (sequential): {} sec".format(num_images, op_time))
+    return op_time
 
 
-def test_process_parallel(num_images, workers=6):
+def test_process_parallel(num_images, workers=12):
     images = get_images(num_images)
 
     raw_images = [to_raw_array(img) for img in images]
@@ -95,6 +99,7 @@ def test_process_parallel(num_images, workers=6):
         op_time = timeit.timeit(proc_all, number=BENCHMARK_COUNT) / BENCHMARK_COUNT
 
     print("Avg time to process {} images (parallel, {} worker threads): {} sec".format(num_images, workers, op_time))
+    return op_time
 
 
 def test_process_sequential_shared(num_images):
@@ -109,9 +114,42 @@ def test_process_sequential_shared(num_images):
     op_time = timeit.timeit(proc_all, number=BENCHMARK_COUNT) / BENCHMARK_COUNT
 
     print("Avg time to process {} images (sequential - shared mem): {} sec".format(num_images, op_time))
+    return op_time
+
+
+def test_process_threaded(num_images):
+    images = get_images(num_images)
+
+    # This sucks because it has to re-create the threads every time, yet it's still the fastest?!
+    def proc_all():
+        img_threads = []
+        for image in images:
+            img_threads.append(Thread(target=proc_image, args=(image,), daemon=True))
+
+        for thread in img_threads:
+            thread.start()
+
+        for thread in img_threads:
+            thread.join()
+
+    op_time = timeit.timeit(proc_all, number=BENCHMARK_COUNT) / BENCHMARK_COUNT
+
+    print("Avg time to process {} images (sequential - threading/no multiprocessing): {} sec".format(num_images, op_time))
+    return op_time
 
 
 if __name__ == '__main__':
-    test_process_parallel(20)
-    test_process_sequential(20)
-    test_process_sequential_shared(20)
+    data = {'multiprocessing': [], 'sequential': [], 'sequential-shared memory': [], 'threading': []}
+
+    for i in range(1, 50, 2):
+        data['multiprocessing'].append((i, test_process_parallel(i)))
+        data['sequential'].append((i, test_process_sequential(i)))
+        data['sequential-shared memory'].append((i, test_process_sequential_shared(i)))
+        data['threading'].append((i, test_process_threaded(i)))
+
+    for name, values in data.items():
+        plt.plot([val[0] for val in values], [val[1] for val in values], label=name)
+    plt.xlabel("Number of images")
+    plt.ylabel("Processing time")
+    plt.legend()
+    plt.savefig("benchmark.png")
